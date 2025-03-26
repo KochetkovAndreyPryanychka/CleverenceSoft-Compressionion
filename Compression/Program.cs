@@ -1,13 +1,11 @@
 ﻿using Microsoft.Extensions.Configuration;
-using System.IO;
-using System.Text;
 using Compression.Exceptions;
 
 namespace Compression;
 
 internal class Program
 {
-    private const int MbSize = 1024 * 1024;                                                             // Size of data block
+    private const double AverageRleCompressionCoefficient = 2;
 
     private static void Main()
     {
@@ -16,94 +14,21 @@ internal class Program
 
         var inputString = Console.ReadLine()!;
 
-        var blocks = SplitStringToBlocks(inputString).ToArray();
+        var compressUtility = new CompressionUtility(
+            inputString,
+            CompressionFunctions.CompressString, 
+            maxParallelismDegree, 
+            coefficient: 1);
+        var compressedString = compressUtility.Run().ToString();
+        Console.WriteLine(compressedString);
 
-        var stringBuilders = CompressAllBlocks(blocks, maxParallelismDegree);
-        
-        Console.WriteLine(GetResult(stringBuilders));
-    }
-
-    private static IEnumerable<string> SplitStringToBlocks(string inputString, int blockSize = MbSize)
-    {
-        var i = 0;
-        while(i < inputString.Length) {
-            var lengthToTake = Math.Min(blockSize, inputString.Length - i);
-            if (i + lengthToTake < inputString.Length && inputString[i + lengthToTake - 1] == inputString[i + lengthToTake])
-            {
-                var lastChar = inputString[i + lengthToTake - 1];
-                for (lengthToTake += 1; i + lengthToTake < inputString.Length; lengthToTake++)
-                {
-                    if (inputString[i + lengthToTake] != lastChar)
-                    {
-                        break;
-                    }
-                }
-            }
-
-            var beginOfBlock = i;
-            i += lengthToTake;
-            yield return inputString.Substring(beginOfBlock, lengthToTake);
-        }
-    }
-
-    private static StringBuilder CompressString(string inputString)
-    {
-        var sb = new StringBuilder();
-        
-        char? currentChar = null;
-        int? currentBatch = null;
-        foreach (var c in inputString)
-        {
-            if (c != currentChar)
-            {
-                sb.Append(currentChar);
-                if (currentBatch > 1)
-                {
-                    sb.Append(currentBatch);
-                }
-
-                currentChar = c;
-                currentBatch = 1;
-            }
-            else
-            {
-                currentBatch++;
-            }
-        }
-
-        if (currentChar != null && currentBatch != null)
-        {
-            sb.Append(currentChar);
-            if (currentBatch > 1)
-            {
-                sb.Append(currentBatch);
-            }
-        }
-
-        return sb;
-    }
-
-    private static StringBuilder GetResult(IEnumerable<StringBuilder> stringBuilders)
-    {
-        var finalSb = new StringBuilder();
-        foreach (var sb in stringBuilders)
-        {
-            finalSb.Append(sb);
-        }
-
-        return finalSb;
-    }
-
-    private static IEnumerable<StringBuilder> CompressAllBlocks(IReadOnlyList<string> blocks, int maxParallelismDegree)
-    {
-        var stringBuilders = new StringBuilder[blocks.Count];
-        var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = maxParallelismDegree };
-        Parallel.For(0, blocks.Count, parallelOptions, i =>
-        {
-            stringBuilders[i] = CompressString(blocks[i]);
-        });
-
-        return stringBuilders;
+        var decompressUtility = new CompressionUtility(
+            compressedString,
+            CompressionFunctions.DecompressString,
+            maxParallelismDegree,
+            coefficient: AverageRleCompressionCoefficient);
+        var decompressString = decompressUtility.Run().ToString();
+        Console.WriteLine(decompressString);
     }
 
     private static IConfiguration Configure()
